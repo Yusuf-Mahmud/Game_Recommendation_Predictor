@@ -4,7 +4,7 @@ import numpy as np
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_squared_error, r2_score
 from sklearn.preprocessing import StandardScaler # <- Remove after and the one from scratch come
-from Linear_Regression_Scratch import YusufLinearRegression
+from Models.Linear_Regression_Scratch import YusufLinearRegression
 import warnings
 warnings.filterwarnings("ignore")
 
@@ -164,7 +164,7 @@ st.markdown("""
 #Load & Cache Data
 @st.cache_data
 def load_data():
-    df = pd.read_csv("train_data.csv")
+    df = pd.read_csv("Data/train_data.csv")
     feature_cols = [
         'RequiredAge', 'DemoCount', 'DeveloperCount', 'DLCCount', 'Metacritic',
         'MovieCount', 'PackageCount', 'PublisherCount', 'ScreenshotCount',
