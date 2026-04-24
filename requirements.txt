@@ -1,0 +1,4 @@
+Used Libraries:
+streamlit
+pandas
+numpy
