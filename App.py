@@ -1,9 +1,10 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
+import joblib
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_squared_error, r2_score
-from sklearn.preprocessing import StandardScaler # <- Remove after and the one from scratch come
+from sklearn.preprocessing import StandardScaler
 from Models.Linear_Regression_Scratch import YusufLinearRegression
 import warnings
 warnings.filterwarnings("ignore")
@@ -188,6 +189,22 @@ def load_data():
     df_clean = df_clean.astype(float)
     return df_clean, feature_cols, target_col
 
+PKL_MODELS = {
+    "Linear Regression (Project)": "Models/linear.pkl",
+    "Ridge":                       "Models/ridge.pkl",
+    "Random Forest":               "Models/random_forest.pkl",
+    "Gradient Boosting":           "Models/gradient_boosting.pkl",
+    "XGBoost":                     "Models/xgboost.pkl",
+}
+
+@st.cache_resource
+def load_pkl_metadata():
+    """Load feature columns, medians, and test metrics saved by Project.py."""
+    feature_columns = joblib.load("Models/feature_columns.pkl")
+    feature_medians = joblib.load("Models/feature_medians.pkl")
+    model_metrics   = joblib.load("Models/model_metrics.pkl")
+    return feature_columns, feature_medians, model_metrics
+
 @st.cache_resource
 def train_model(model_name: str):
     df, feature_cols, target_col = load_data()
@@ -197,19 +214,20 @@ def train_model(model_name: str):
     X_scaled = scaler.fit_transform(X)
     X_train, X_test, y_train, y_test = train_test_split(X_scaled, y, test_size=0.2, random_state=42)
 
-    #Models (Han7ot hna elmodels bta3tna)
-    models = {
-        "Linear Regression": YusufLinearRegression(learning_rate=0.01, epochs=1000),
-        #Examples:
-        # "Random Forest": RandomForestRegressor(),
-        # "XGBoost": XGBRegressor(),
-        # w ndefha fi el select box ta7t
-    }
-    model = models[model_name]
-    model.fit(X_train, y_train)
-    y_pred = model.predict(X_test)
-    rmse = np.sqrt(mean_squared_error(y_test, y_pred))
-    r2   = r2_score(y_test, y_pred)
+    if model_name == "Linear Regression (Scratch)":
+        model = YusufLinearRegression(learning_rate=0.01, epochs=1000)
+        model.fit(X_train, y_train)
+        y_pred = model.predict(X_test)
+        rmse = np.sqrt(mean_squared_error(y_test, y_pred))
+        r2   = r2_score(y_test, y_pred)
+    else:
+        model = joblib.load(PKL_MODELS[model_name])
+        # Load the real test metrics saved by Project.py
+        _, _, model_metrics = load_pkl_metadata()
+        metrics = model_metrics.get(model_name, {})
+        rmse = metrics.get("RMSE", float("nan"))
+        r2   = metrics.get("R2",   float("nan"))
+
     return model, scaler, feature_cols, rmse, r2, len(df)
 
 #Sidebar
@@ -222,8 +240,15 @@ with st.sidebar:
     st.markdown('<div class="section-header">⚙️ Model</div>', unsafe_allow_html=True)
     model_name = st.selectbox(
         "Algorithm",
-        ["Linear Regression"],   # ← add more model names here when ready
-        help="More models coming soon"
+        [
+            "Linear Regression (Scratch)",   # YusufLinearRegression — trained live
+            "Linear Regression (Project)",   # sklearn LinearRegression — from Project.py PKL
+            "Ridge",
+            "Random Forest",
+            "Gradient Boosting",
+            "XGBoost",
+        ],
+        help="(Scratch) = custom gradient-descent implementation. Others = pre-trained from Project.py"
     )
 
     st.markdown('<div class="section-header">📊 Game Details</div>', unsafe_allow_html=True)
@@ -308,18 +333,21 @@ with col_m1:
         <div class="sub">Active</div>
     </div>""", unsafe_allow_html=True)
 with col_m2:
+    import math
+    r2_display  = f"{r2:.3f}" if not math.isnan(r2) else "N/A"
     st.markdown(f"""
     <div class="metric-card">
         <div class="label">R² Score</div>
-        <div class="value">{r2:.3f}</div>
+        <div class="value">{r2_display}</div>
         <div class="sub">Test set</div>
     </div>""", unsafe_allow_html=True)
 with col_m3:
+    rmse_display = f"{rmse:,.2f}" if not math.isnan(rmse) else "N/A"
     st.markdown(f"""
     <div class="metric-card">
         <div class="label">RMSE</div>
-        <div class="value">{rmse:,.0f}</div>
-        <div class="sub">Recommendations</div>
+        <div class="value">{rmse_display}</div>
+        <div class="sub">log-scale</div>
     </div>""", unsafe_allow_html=True)
 with col_m4:
     st.markdown(f"""
@@ -333,124 +361,231 @@ st.markdown("<br>", unsafe_allow_html=True)
 
 #Prediction
 if predict_btn:
-    input_vector = [
-        required_age, demo_count, developer_count, dlc_count, metacritic,
-        movie_count, package_count, publisher_count, screenshot_count,
-        steam_spy_owners, steam_spy_players,
-        achievement_count, highlighted_achiev,
-        int(ctrl_support), int(is_free), int(free_ver), int(purchase_avail),
-        int(plat_win), int(plat_linux), int(plat_mac),
-        int(cat_single), int(cat_multi), int(cat_coop),
-        int(cat_mmo), int(cat_iap), int(cat_vr),
-        int(g_indie), int(g_action), int(g_adventure), int(g_casual),
-        int(g_strategy), int(g_rpg), int(g_simulation),
-        int(g_earlyaccess), int(g_f2p), int(g_sports),
-        int(g_racing), int(g_mmo),
-        price_initial, price_final,
-    ]
-    X_input = scaler.transform([input_vector])
-    prediction = max(0, model.predict(X_input)[0])
-
-    # Rating label
-    if prediction < 500:
-        rating, color = "Overwhelmingly Negative", "#ff4444"
-    elif prediction < 2000:
-        rating, color = "Mostly Negative", "#ff7744"
-    elif prediction < 5000:
-        rating, color = "Mixed", "#ffaa44"
-    elif prediction < 10000:
-        rating, color = "Mostly Positive", "#88cc44"
-    elif prediction < 50000:
-        rating, color = "Very Positive", "#44cc88"
+    if model_name == "Linear Regression (Scratch)":
+        # ── Scratch model: use the same 40 raw features the scaler was fit on ──
+        input_vector = [
+            required_age, demo_count, developer_count, dlc_count, metacritic,
+            movie_count, package_count, publisher_count, screenshot_count,
+            steam_spy_owners, steam_spy_players,
+            achievement_count, highlighted_achiev,
+            int(ctrl_support), int(is_free), int(free_ver), int(purchase_avail),
+            int(plat_win), int(plat_linux), int(plat_mac),
+            int(cat_single), int(cat_multi), int(cat_coop),
+            int(cat_mmo), int(cat_iap), int(cat_vr),
+            int(g_indie), int(g_action), int(g_adventure), int(g_casual),
+            int(g_strategy), int(g_rpg), int(g_simulation),
+            int(g_earlyaccess), int(g_f2p), int(g_sports),
+            int(g_racing), int(g_mmo),
+            price_initial, price_final,
+        ]
+        X_input = scaler.transform([input_vector])
+        prediction = max(0, model.predict(X_input)[0])
     else:
-        rating, color = "Overwhelmingly Positive", "#44aaff"
+        # ── PKL models: reconstruct all engineered features, impute the rest ──
+        import math
+        feat_cols, feat_medians, _ = load_pkl_metadata()
 
-    #TTS via Web Speech API
-    pred_int = int(round(prediction))
-    def number_to_words(n):
-        if n >= 1_000_000:
-            millions = n // 1_000_000
-            remainder = n % 1_000_000
-            if remainder == 0:
-                return f"{millions} million"
-            thousands = remainder // 1_000
-            rest = remainder % 1_000
-            parts = [f"{millions} million"]
-            if thousands: parts.append(f"{thousands} thousand")
-            if rest: parts.append(str(rest))
-            return " ".join(parts)
-        elif n >= 1_000:
-            thousands = n // 1_000
-            rest = n % 1_000
-            if rest == 0:
-                return f"{thousands} thousand"
-            return f"{thousands} thousand {rest}"
-        else:
-            return str(n)
-    tts_text = f"Based on your input, the recommendations are {number_to_words(pred_int)} recommend"
-    st.components.v1.html(f"""
-        <script>
-            window.onload = function() {{
-                if ('speechSynthesis' in window) {{
-                    window.speechSynthesis.cancel();
-                    var msg = new SpeechSynthesisUtterance("{tts_text}");
-                    msg.rate  = 0.2;
-                    msg.pitch = 1.0;
-                    msg.volume = 1.0;
-                    var voices = window.speechSynthesis.getVoices();
-                    var preferred = voices.find(v => v.lang.startsWith('en') && v.localService);
-                    if (preferred) msg.voice = preferred;
-                    window.speechSynthesis.speak(msg);
-                }}
-            }};
-            if (window.speechSynthesis) {{
-                window.speechSynthesis.onvoiceschanged = function() {{
-                    window.speechSynthesis.cancel();
-                    var msg = new SpeechSynthesisUtterance("{tts_text}");
-                    msg.rate  = 0.95;
-                    msg.pitch = 1.0;
-                    msg.volume = 1.0;
-                    var voices = window.speechSynthesis.getVoices();
-                    var preferred = voices.find(v => v.lang.startsWith('en') && v.localService);
-                    if (preferred) msg.voice = preferred;
-                    window.speechSynthesis.speak(msg);
-                }};
-            }}
-        </script>
-    """, height=0)
-
-    col_pred, col_detail = st.columns([1, 1])
-    with col_pred:
-        st.markdown(f"""
-        <div class="prediction-box">
-            <div class="pred-label">Predicted Recommendations</div>
-            <div class="pred-value">{prediction:,.0f}</div>
-            <div style="color:{color}; font-size:1rem; font-weight:600; margin-top:0.5rem">
-                {rating}
-            </div>
-        </div>""", unsafe_allow_html=True)
-
-    with col_detail:
-        st.markdown("#### 📋 Input Summary")
-        summary_data = {
-            "Feature": ["Price", "Metacritic", "Achievements", "DLC Count",
-                        "Est. Owners", "Platforms", "Genres Selected"],
-            "Value": [
-                f"${price_final:.2f}",
-                str(metacritic),
-                str(achievement_count),
-                str(dlc_count),
-                f"{steam_spy_owners:,}",
-                ", ".join(filter(None, [
-                    "Windows" if plat_win else "",
-                    "Linux" if plat_linux else "",
-                    "Mac" if plat_mac else ""
-                ])),
-                str(sum([g_indie, g_action, g_adventure, g_casual, g_strategy,
-                        g_rpg, g_simulation, g_earlyaccess, g_f2p, g_sports, g_racing, g_mmo]))
-            ]
+        # --- values we know from the UI ---
+        known = {
+            "RequiredAge":               required_age,
+            "DemoCount":                 demo_count,
+            "DeveloperCount":            developer_count,
+            "DLCCount":                  dlc_count,
+            "Metacritic":                metacritic,
+            "MovieCount":                movie_count,
+            "PackageCount":              package_count,
+            "PublisherCount":            publisher_count,
+            "ScreenshotCount":           screenshot_count,
+            "SteamSpyOwners":            steam_spy_owners,
+            "SteamSpyPlayersEstimate":   steam_spy_players,
+            "AchievementCount":          achievement_count,
+            "AchievementHighlightedCount": highlighted_achiev,
+            "ControllerSupport":         int(ctrl_support),
+            "IsFree":                    int(is_free),
+            "FreeVerAvail":              int(free_ver),
+            "PurchaseAvail":             int(purchase_avail),
+            "PlatformWindows":           int(plat_win),
+            "PlatformLinux":             int(plat_linux),
+            "PlatformMac":               int(plat_mac),
+            "CategorySinglePlayer":      int(cat_single),
+            "CategoryMultiplayer":       int(cat_multi),
+            "CategoryCoop":              int(cat_coop),
+            "CategoryMMO":               int(cat_mmo),
+            "CategoryInAppPurchase":     int(cat_iap),
+            "CategoryVRSupport":         int(cat_vr),
+            "GenreIsIndie":              int(g_indie),
+            "GenreIsAction":             int(g_action),
+            "GenreIsAdventure":          int(g_adventure),
+            "GenreIsCasual":             int(g_casual),
+            "GenreIsStrategy":           int(g_strategy),
+            "GenreIsRPG":                int(g_rpg),
+            "GenreIsSimulation":         int(g_simulation),
+            "GenreIsEarlyAccess":        int(g_earlyaccess),
+            "GenreIsFreeToPlay":         int(g_f2p),
+            "GenreIsSports":             int(g_sports),
+            "GenreIsRacing":             int(g_racing),
+            "GenreIsMassivelyMultiplayer": int(g_mmo),
+            "PriceInitial":              price_initial,
+            "PriceFinal":                price_final,
         }
-        st.dataframe(pd.DataFrame(summary_data), hide_index=True, use_container_width=True)
+
+        # --- engineered features we CAN reconstruct from UI inputs ---
+        mc = metacritic if metacritic > 0 else feat_medians.get("Metacritic", 75)
+        known["price_discount"]       = price_initial - price_final
+        known["platform_count"]       = int(plat_win) + int(plat_linux) + int(plat_mac)
+        known["category_count"]       = int(cat_single) + int(cat_multi) + int(cat_coop) + int(cat_mmo) + int(cat_vr)
+        known["content_volume"]       = screenshot_count + movie_count + dlc_count + package_count
+        known["highlighted_achievements_ratio"] = highlighted_achiev / (achievement_count + 1)
+        known["action_multiplayer"]   = int(g_action) * int(cat_multi)
+        known["rpg_achievement"]      = int(g_rpg) * achievement_count
+        known["strategy_complexity"]  = int(g_strategy) * achievement_count
+        known["indie_price"]          = int(g_indie) * price_final
+        known["owners_metacritic"]    = steam_spy_owners * mc
+        known["players_metacritic"]   = steam_spy_players * mc
+        known["owners_players"]       = steam_spy_owners * steam_spy_players
+        known["price_owners"]         = price_final * steam_spy_owners
+        known["price_players"]        = price_final * steam_spy_players
+        known["free_x_owners"]        = int(is_free) * steam_spy_owners
+        known["free_x_players"]       = int(is_free) * steam_spy_players
+        known["content_owners"]       = known["content_volume"] * steam_spy_owners
+        known["content_players"]      = known["content_volume"] * steam_spy_players
+        known["content_metacritic"]   = known["content_volume"] * mc
+        known["achievement_owners"]   = achievement_count * steam_spy_owners
+        known["achievement_players"]  = achievement_count * steam_spy_players
+        known["platform_owners"]      = known["platform_count"] * steam_spy_owners
+        known["platform_players"]     = known["platform_count"] * steam_spy_players
+        known["category_owners"]      = known["category_count"] * steam_spy_owners
+        known["category_players"]     = known["category_count"] * steam_spy_players
+
+        # log1p transform the same columns Project.py transformed
+        # (all continuous non-binary, non-NLP, non-freq-encoded columns)
+        log_transform_keys = [
+            "RequiredAge", "DemoCount", "DeveloperCount", "DLCCount", "Metacritic",
+            "MovieCount", "PackageCount", "PublisherCount", "ScreenshotCount",
+            "SteamSpyOwners", "SteamSpyPlayersEstimate",
+            "AchievementCount", "AchievementHighlightedCount",
+            "PriceInitial", "PriceFinal",
+            "price_discount", "platform_count", "category_count", "content_volume",
+            "owners_metacritic", "players_metacritic", "owners_players",
+            "price_owners", "price_players", "free_x_owners", "free_x_players",
+            "content_owners", "content_players", "content_metacritic",
+            "achievement_owners", "achievement_players",
+            "platform_owners", "platform_players",
+            "category_owners", "category_players",
+        ]
+        for k in log_transform_keys:
+            if k in known:
+                known[k] = math.log1p(max(0, known[k]))
+
+        # --- build the final vector in the exact column order the model expects ---
+        # for any column we couldn't compute, fall back to its training median
+        row = [known.get(col, feat_medians.get(col, 0)) for col in feat_cols]
+        X_input = np.array(row).reshape(1, -1)
+        raw_pred = model.predict(X_input)[0]
+
+        # Project.py applied log1p to y, so reverse with expm1
+        prediction = max(0, float(np.expm1(raw_pred)))
+
+        # Rating label
+        if prediction < 500:
+            rating, color = "Overwhelmingly Negative", "#ff4444"
+        elif prediction < 2000:
+            rating, color = "Mostly Negative", "#ff7744"
+        elif prediction < 5000:
+            rating, color = "Mixed", "#ffaa44"
+        elif prediction < 10000:
+            rating, color = "Mostly Positive", "#88cc44"
+        elif prediction < 50000:
+            rating, color = "Very Positive", "#44cc88"
+        else:
+            rating, color = "Overwhelmingly Positive", "#44aaff"
+
+        #TTS via Web Speech API
+        pred_int = int(round(prediction))
+        def number_to_words(n):
+            if n >= 1_000_000:
+                millions = n // 1_000_000
+                remainder = n % 1_000_000
+                if remainder == 0:
+                    return f"{millions} million"
+                thousands = remainder // 1_000
+                rest = remainder % 1_000
+                parts = [f"{millions} million"]
+                if thousands: parts.append(f"{thousands} thousand")
+                if rest: parts.append(str(rest))
+                return " ".join(parts)
+            elif n >= 1_000:
+                thousands = n // 1_000
+                rest = n % 1_000
+                if rest == 0:
+                    return f"{thousands} thousand"
+                return f"{thousands} thousand {rest}"
+            else:
+                return str(n)
+        tts_text = f"Based on your input, the recommendations are {number_to_words(pred_int)} recommend"
+        st.components.v1.html(f"""
+            <script>
+                window.onload = function() {{
+                    if ('speechSynthesis' in window) {{
+                        window.speechSynthesis.cancel();
+                        var msg = new SpeechSynthesisUtterance("{tts_text}");
+                        msg.rate  = 0.2;
+                        msg.pitch = 1.0;
+                        msg.volume = 1.0;
+                        var voices = window.speechSynthesis.getVoices();
+                        var preferred = voices.find(v => v.lang.startsWith('en') && v.localService);
+                        if (preferred) msg.voice = preferred;
+                        window.speechSynthesis.speak(msg);
+                    }}
+                }};
+                if (window.speechSynthesis) {{
+                    window.speechSynthesis.onvoiceschanged = function() {{
+                        window.speechSynthesis.cancel();
+                        var msg = new SpeechSynthesisUtterance("{tts_text}");
+                        msg.rate  = 0.95;
+                        msg.pitch = 1.0;
+                        msg.volume = 1.0;
+                        var voices = window.speechSynthesis.getVoices();
+                        var preferred = voices.find(v => v.lang.startsWith('en') && v.localService);
+                        if (preferred) msg.voice = preferred;
+                        window.speechSynthesis.speak(msg);
+                    }};
+                }}
+            </script>
+        """, height=0)
+
+        col_pred, col_detail = st.columns([1, 1])
+        with col_pred:
+            st.markdown(f"""
+            <div class="prediction-box">
+                <div class="pred-label">Predicted Recommendations</div>
+                <div class="pred-value">{prediction:,.0f}</div>
+                <div style="color:{color}; font-size:1rem; font-weight:600; margin-top:0.5rem">
+                    {rating}
+                </div>
+            </div>""", unsafe_allow_html=True)
+
+        with col_detail:
+            st.markdown("#### 📋 Input Summary")
+            summary_data = {
+                "Feature": ["Price", "Metacritic", "Achievements", "DLC Count",
+                            "Est. Owners", "Platforms", "Genres Selected"],
+                "Value": [
+                    f"${price_final:.2f}",
+                    str(metacritic),
+                    str(achievement_count),
+                    str(dlc_count),
+                    f"{steam_spy_owners:,}",
+                    ", ".join(filter(None, [
+                        "Windows" if plat_win else "",
+                        "Linux" if plat_linux else "",
+                        "Mac" if plat_mac else ""
+                    ])),
+                    str(sum([g_indie, g_action, g_adventure, g_casual, g_strategy,
+                            g_rpg, g_simulation, g_earlyaccess, g_f2p, g_sports, g_racing, g_mmo]))
+                ]
+            }
+            st.dataframe(pd.DataFrame(summary_data), hide_index=True, use_container_width=True)
 
 else:
     # Placeholder state
@@ -469,30 +604,48 @@ else:
 
 st.markdown("<br>", unsafe_allow_html=True)
 
-#Feature Importance (Linear Regression coefficients)
+#Feature Importance / Coefficients
 with st.expander("📈 Feature Importance / Model Coefficients", expanded=False):
-    coefs = pd.DataFrame({
-        "Feature": feature_cols,
-        "Coefficient": model.coef_
-    }).sort_values("Coefficient", key=abs, ascending=False).head(20)
-
     import plotly.express as px
-    fig = px.bar(
-        coefs, x="Coefficient", y="Feature", orientation="h",
-        color="Coefficient",
-        color_continuous_scale=["#ff4444", "#2a2a4a", "#4480ff"],
-        template="plotly_dark",
-    )
-    fig.update_layout(
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)",
-        font=dict(family="Inter", color="#a0a0c0"),
-        height=500,
-        yaxis=dict(autorange="reversed"),
-        showlegend=False,
-        margin=dict(l=20, r=20, t=20, b=20),
-    )
-    st.plotly_chart(fig, use_container_width=True)
+
+    # Tree-based models expose feature_importances_; linear models expose coef_
+    if hasattr(model, "feature_importances_"):
+        importance_values = model.feature_importances_
+        bar_label = "Importance"
+        color_scale = ["#1a1a4a", "#4480ff"]
+        diverging = False
+    elif hasattr(model, "coef_"):
+        importance_values = model.coef_
+        bar_label = "Coefficient"
+        color_scale = ["#ff4444", "#2a2a4a", "#4480ff"]
+        diverging = True
+    else:
+        importance_values = None
+
+    if importance_values is not None:
+        coefs = pd.DataFrame({
+            "Feature": feature_cols,
+            bar_label: importance_values
+        }).sort_values(bar_label, key=abs, ascending=False).head(20)
+
+        fig = px.bar(
+            coefs, x=bar_label, y="Feature", orientation="h",
+            color=bar_label,
+            color_continuous_scale=color_scale,
+            template="plotly_dark",
+        )
+        fig.update_layout(
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(0,0,0,0)",
+            font=dict(family="Inter", color="#a0a0c0"),
+            height=500,
+            yaxis=dict(autorange="reversed"),
+            showlegend=False,
+            margin=dict(l=20, r=20, t=20, b=20),
+        )
+        st.plotly_chart(fig, use_container_width=True)
+    else:
+        st.info("Feature importance is not available for the selected model.")
 
 #Data Explorer
 with st.expander("🗂️ Training Data Explorer", expanded=False):
