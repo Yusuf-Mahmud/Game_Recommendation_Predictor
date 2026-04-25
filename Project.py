@@ -995,19 +995,105 @@ def run_models(X_train, X_test, y_train, y_test, save_dir="saved_models"):
 """
 Save feature metadata for App.py inference
 """
+# ── IMPORTANT: only keep columns that App.py can fully reconstruct from UI inputs.
+# NLP features (AllText_len, has_*, sentiment), frequency-encoded text columns
+# (SupportEmail, SupportURL, Website, QueryName_FreqEnc, ResponseName_FreqEnc),
+# hardware-req columns (PC_MinRam, etc.), and variance columns cannot be
+# reconstructed at inference time, so they are excluded here.
+# Training and inference must use exactly the same feature set.
+
+INFERRABLE_FEATURES = [
+    # ── core numeric ──────────────────────────────────────────────────────────
+    "RequiredAge",
+    "DemoCount",
+    "DeveloperCount",
+    "DLCCount",
+    "Metacritic",
+    "MovieCount",
+    "PackageCount",
+    "PublisherCount",
+    "ScreenshotCount",
+    "SteamSpyOwners",
+    "SteamSpyPlayersEstimate",
+    "AchievementCount",
+    "AchievementHighlightedCount",
+    # ── binary flags ──────────────────────────────────────────────────────────
+    "ControllerSupport",
+    "IsFree",
+    "FreeVerAvail",
+    "PurchaseAvail",
+    "PlatformWindows",
+    "PlatformLinux",
+    "PlatformMac",
+    "CategorySinglePlayer",
+    "CategoryMultiplayer",
+    "CategoryCoop",
+    "CategoryMMO",
+    "CategoryInAppPurchase",
+    "CategoryVRSupport",
+    "GenreIsIndie",
+    "GenreIsAction",
+    "GenreIsAdventure",
+    "GenreIsCasual",
+    "GenreIsStrategy",
+    "GenreIsRPG",
+    "GenreIsSimulation",
+    "GenreIsEarlyAccess",
+    "GenreIsFreeToPlay",
+    "GenreIsSports",
+    "GenreIsRacing",
+    "GenreIsMassivelyMultiplayer",
+    # ── price ─────────────────────────────────────────────────────────────────
+    "PriceInitial",
+    "PriceFinal",
+    # ── engineered interactions (all computable from the inputs above) ────────
+    "price_discount",
+    "platform_count",
+    "category_count",
+    "content_volume",
+    "highlighted_achievements_ratio",
+    "action_multiplayer",
+    "rpg_achievement",
+    "strategy_complexity",
+    "indie_price",
+    "owners_metacritic",
+    "players_metacritic",
+    "owners_players",
+    "price_owners",
+    "price_players",
+    "free_x_owners",
+    "free_x_players",
+    "content_owners",
+    "content_players",
+    "content_metacritic",
+    "achievement_owners",
+    "achievement_players",
+    "platform_owners",
+    "platform_players",
+    "category_owners",
+    "category_players",
+]
+
+# Keep only the columns that actually exist in df after all preprocessing
+inferrable_cols = [c for c in INFERRABLE_FEATURES if c in df.columns]
+df_model = df[inferrable_cols].copy()
+
+print(f"\nTraining on {len(inferrable_cols)} inferrable features (dropped NLP / text columns).")
+print(inferrable_cols)
+
 # Save the exact column order the models were trained on
-joblib.dump(list(df.columns), "Models/feature_columns.pkl")
+joblib.dump(inferrable_cols, "Models/feature_columns.pkl")
 
-# Save per-column medians so App.py can impute missing engineered features
-joblib.dump(df.median(numeric_only=True).to_dict(), "Models/feature_medians.pkl")
+# Save per-column medians so App.py can impute any missing values
+joblib.dump(df_model.median(numeric_only=True).to_dict(), "Models/feature_medians.pkl")
 
-print(f"Saved {len(df.columns)} feature columns and medians to Models/")
+print(f"Saved {len(inferrable_cols)} feature columns and medians to Models/")
 
 """
 Split & Run
 """
 X_train, X_test, y_train, y_test = train_test_split(
-    df, y,
+    df_model, y,
     test_size=0.2,
     random_state=42
 )
