@@ -99,7 +99,12 @@ def _rating(value: float) -> tuple[str, str]:
 
 
 # ── public API ────────────────────────────────────────────────────────────────
-
+_poly_cache = None
+def _load_poly_transformer():
+    global _poly_cache
+    if _poly_cache is None:
+        _poly_cache = joblib.load(MODELS_DIR / "polynomial_transformer.pkl")
+    return _poly_cache
 def predict(model_name: str, inputs: dict) -> dict:
     """
     Parameters
@@ -131,9 +136,13 @@ def predict(model_name: str, inputs: dict) -> dict:
     from preprocess import build_inference_row  # noqa: PLC0415
 
     feat_cols, feat_medians = _load_metadata()
-    model = _load_model(canonical)
-
     X = build_inference_row(inputs, feat_cols, feat_medians)
+    model = _load_model(canonical)
+    
+    if canonical == "Polynomial Regression":
+        poly = _load_poly_transformer()
+        X = poly.transform(X)
+        
     log_pred = float(model.predict(X)[0])
     value    = max(0.0, float(np.expm1(log_pred)))   # reverse log1p on target
 
