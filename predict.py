@@ -46,7 +46,7 @@ MODELS_DIR = BASE_DIR / "Models"
 
 PKL_PATHS = {
     "Linear Regression (Project)": MODELS_DIR / "linear.pkl",
-    "Polynomial Rgression": MODELS_DIR / "polynomial.pkl",
+    "Polynomial Regression": MODELS_DIR / "polynomial.pkl",
     "Ridge":                        MODELS_DIR / "ridge.pkl",
     "Random Forest":                MODELS_DIR / "random_forest.pkl",
     "Gradient Boosting":            MODELS_DIR / "gradient_boosting.pkl",
