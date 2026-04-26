@@ -186,6 +186,7 @@ with st.sidebar:
     model_name = st.selectbox("Algorithm", [
         "Linear Regression (Scratch)",
         "Linear Regression (Project)",
+        "Polynomial Regression",
         "Ridge",
         "Random Forest",
         "Gradient Boosting",
