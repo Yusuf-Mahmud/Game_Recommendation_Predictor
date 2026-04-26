@@ -833,6 +833,23 @@ def train_linear(X_train, X_test, y_train, y_test):
 
 
 """
+Polynomial Regression
+"""
+def train_polynomial(X_train, X_test, y_train, y_test, degree=2):
+    poly = PolynomialFeatures(degree=degree, include_bias=False)
+    X_train_poly = poly.fit_transform(X_train)
+    X_test_poly = poly.transform(X_test)
+
+    model = Ridge(alpha=1.0)  # بنستخدم Ridge مع Poly عشان نتجنب Overfitting
+    model.fit(X_train_poly, y_train)
+
+    return model, poly, {
+        "train": evaluate(y_train, model.predict(X_train_poly)),
+        "test": evaluate(y_test, model.predict(X_test_poly))
+    }
+
+
+"""
 Ridge
 """
 def train_ridge(X_train, X_test, y_train, y_test, alpha=1.0):
@@ -942,6 +959,13 @@ def run_models(X_train, X_test, y_train, y_test, save_dir="saved_models"):
     results["Linear Regression Test"] = lr_res["test"]
     joblib.dump(lr_model, f"{save_dir}/linear.pkl")
 
+    # Polynomial Regression
+    poly_model, poly_transformer, poly_res = train_polynomial(X_train, X_test, y_train, y_test)
+    results["Polynomial Regression Train"] = poly_res["train"]
+    results["Polynomial Regression Test"] = poly_res["test"]
+    joblib.dump(poly_model, f"{save_dir}/polynomial.pkl")
+    joblib.dump(poly_transformer, f"{save_dir}/polynomial_transformer.pkl")
+    
     # Ridge
     ridge_model, ridge_res = train_ridge(X_train, X_test, y_train, y_test)
     results["Ridge Train"] = ridge_res["train"]
