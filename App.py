@@ -5,6 +5,14 @@ Inference is handled by predict.py.
 This file only deals with UI.
 """
 
+import sys
+from pathlib import Path
+
+# ── ensure project root is on sys.path (required on Streamlit Cloud) ──────────
+_BASE = Path(__file__).resolve().parent
+if str(_BASE) not in sys.path:
+    sys.path.insert(0, str(_BASE))
+
 import math
 import numpy as np
 import pandas as pd
@@ -317,9 +325,11 @@ col_m1, col_m2, col_m3, col_m4 = st.columns(4)
 with col_m1:
     st.markdown(f'<div class="metric-card"><div class="label">Model</div><div class="value" style="font-size:1rem">{model_name}</div><div class="sub">Active</div></div>', unsafe_allow_html=True)
 with col_m2:
-    st.markdown(f'<div class="metric-card"><div class="label">R² Score</div><div class="value">{r2:.3f if not math.isnan(r2) else "N/A"}</div><div class="sub">Test set</div></div>', unsafe_allow_html=True)
+    r2_display = f"{r2:.3f}" if not math.isnan(r2) else "N/A"
+    st.markdown(f'<div class="metric-card"><div class="label">R² Score</div><div class="value">{r2_display}</div><div class="sub">Test set</div></div>', unsafe_allow_html=True)
 with col_m3:
-    st.markdown(f'<div class="metric-card"><div class="label">RMSE</div><div class="value">{f"{rmse:,.2f}" if not math.isnan(rmse) else "N/A"}</div><div class="sub">log-scale</div></div>', unsafe_allow_html=True)
+    rmse_display = f"{rmse:,.2f}" if not math.isnan(rmse) else "N/A"
+    st.markdown(f'<div class="metric-card"><div class="label">RMSE</div><div class="value">{rmse_display}</div><div class="sub">log-scale</div></div>', unsafe_allow_html=True)
 with col_m4:
     st.markdown(f'<div class="metric-card"><div class="label">Training Rows</div><div class="value">{n_samples:,}</div><div class="sub">Steam games</div></div>', unsafe_allow_html=True)
 
