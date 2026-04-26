@@ -1,5 +1,5 @@
 """
-App.py  –  Steam ML Predictor (refactored)
+App.py  –  Steam ML Predictor
 All preprocessing lives in preprocess.py.
 Inference is handled by predict.py.
 This file only deals with UI.
@@ -8,7 +8,6 @@ This file only deals with UI.
 import sys
 from pathlib import Path
 
-# ── ensure project root is on sys.path (required on Streamlit Cloud) ──────────
 _BASE = Path(__file__).resolve().parent
 if str(_BASE) not in sys.path:
     sys.path.insert(0, str(_BASE))
@@ -23,7 +22,6 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_squared_error, r2_score
 from sklearn.preprocessing import StandardScaler
 
-# ── project modules ───────────────────────────────────────────────────────────
 from predict import predict as run_predict, PKL_PATHS
 from Models.Linear_Regression_Scratch import YusufLinearRegression
 
@@ -38,7 +36,7 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# ── CSS (unchanged from original) ────────────────────────────────────────────
+# ── CSS ───────────────────────────────────────────────────────────────────────
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=IBM+Plex+Mono:wght@300;400;500&display=swap');
@@ -118,30 +116,35 @@ div[data-testid="stMarkdownContainer"] p { color: #6060a0 !important; font-size:
 
 # ── Data / model loaders ──────────────────────────────────────────────────────
 
+# 40 raw features used by the scratch model (no log-transform, StandardScaler)
+SCRATCH_FEATURE_COLS = [
+    'RequiredAge', 'DemoCount', 'DeveloperCount', 'DLCCount', 'Metacritic',
+    'MovieCount', 'PackageCount', 'PublisherCount', 'ScreenshotCount',
+    'SteamSpyOwners', 'SteamSpyPlayersEstimate',
+    'AchievementCount', 'AchievementHighlightedCount',
+    'ControllerSupport', 'IsFree', 'FreeVerAvail', 'PurchaseAvail',
+    'PlatformWindows', 'PlatformLinux', 'PlatformMac',
+    'CategorySinglePlayer', 'CategoryMultiplayer', 'CategoryCoop',
+    'CategoryMMO', 'CategoryInAppPurchase', 'CategoryVRSupport',
+    'GenreIsIndie', 'GenreIsAction', 'GenreIsAdventure', 'GenreIsCasual',
+    'GenreIsStrategy', 'GenreIsRPG', 'GenreIsSimulation',
+    'GenreIsEarlyAccess', 'GenreIsFreeToPlay', 'GenreIsSports',
+    'GenreIsRacing', 'GenreIsMassivelyMultiplayer',
+    'PriceInitial', 'PriceFinal',
+]
+
+
 @st.cache_data
 def load_raw_data():
     df = pd.read_csv("Data/train_data.csv")
-    feature_cols = [
-        'RequiredAge','DemoCount','DeveloperCount','DLCCount','Metacritic',
-        'MovieCount','PackageCount','PublisherCount','ScreenshotCount',
-        'SteamSpyOwners','SteamSpyPlayersEstimate',
-        'AchievementCount','AchievementHighlightedCount',
-        'ControllerSupport','IsFree','FreeVerAvail','PurchaseAvail',
-        'PlatformWindows','PlatformLinux','PlatformMac',
-        'CategorySinglePlayer','CategoryMultiplayer','CategoryCoop',
-        'CategoryMMO','CategoryInAppPurchase','CategoryVRSupport',
-        'GenreIsIndie','GenreIsAction','GenreIsAdventure','GenreIsCasual',
-        'GenreIsStrategy','GenreIsRPG','GenreIsSimulation',
-        'GenreIsEarlyAccess','GenreIsFreeToPlay','GenreIsSports',
-        'GenreIsRacing','GenreIsMassivelyMultiplayer',
-        'PriceInitial','PriceFinal',
-    ]
     target_col = 'RecommendationCount'
-    df_clean = df[feature_cols + [target_col]].dropna()
+    df_clean = df[SCRATCH_FEATURE_COLS + [target_col]].dropna()
     for col in df_clean.columns:
         if df_clean[col].dtype == object:
-            df_clean[col] = df_clean[col].map({'True':1,'False':0,True:1,False:0}).fillna(0)
-    return df_clean.astype(float), feature_cols, target_col
+            df_clean[col] = df_clean[col].map(
+                {'True': 1, 'False': 0, True: 1, False: 0}
+            ).fillna(0)
+    return df_clean.astype(float), SCRATCH_FEATURE_COLS, target_col
 
 
 @st.cache_resource
@@ -160,7 +163,9 @@ def train_scratch_model():
     y = df[target_col].values
     scaler = StandardScaler()
     X_scaled = scaler.fit_transform(X)
-    X_train, X_test, y_train, y_test = train_test_split(X_scaled, y, test_size=0.2, random_state=42)
+    X_train, X_test, y_train, y_test = train_test_split(
+        X_scaled, y, test_size=0.2, random_state=42
+    )
     model = YusufLinearRegression(learning_rate=0.01, epochs=1000)
     model.fit(X_train, y_train)
     y_pred = model.predict(X_test)
@@ -195,33 +200,37 @@ with st.sidebar:
 
     is_pkl = model_name != "Linear Regression (Scratch)"
 
+    # ── Pricing & Audience ────────────────────────────────────────────────────
     st.markdown('<div class="section-header">💰 Pricing & Audience</div>', unsafe_allow_html=True)
     required_age   = st.number_input("Required Age",        0,   18,    0)
     price_initial  = st.number_input("Initial Price ($)",   0.0, 200.0, 9.99,  step=0.01)
     price_final    = st.number_input("Final Price ($)",     0.0, 200.0, 9.99,  step=0.01)
+    metacritic     = st.number_input("Metacritic Score (0 = none)", 0, 100, 0)
     is_free        = st.checkbox("Free to Play (IsFree)")
     purchase_avail = st.checkbox("Purchase Available", value=True)
     free_ver_avail = st.checkbox("Free Version Available")
 
+    # ── Popularity Estimates ──────────────────────────────────────────────────
     st.markdown('<div class="section-header">📊 Popularity Estimates</div>', unsafe_allow_html=True)
-    steam_spy_owners      = st.number_input("Est. Owners (SteamSpy)",      0, 100_000_000, 500_000, step=10_000)
-    steam_spy_owners_var  = st.number_input("Owners Variance (SteamSpy)",  0, 100_000_000, 200_000, step=10_000)
-    steam_spy_players     = st.number_input("Est. Players (SteamSpy)",     0, 100_000_000, 300_000, step=10_000)
-    steam_spy_players_var = st.number_input("Players Variance (SteamSpy)", 0, 100_000_000, 150_000, step=10_000)
+    steam_spy_owners  = st.number_input("Est. Owners (SteamSpy)",  0, 100_000_000, 500_000, step=10_000)
+    steam_spy_players = st.number_input("Est. Players (SteamSpy)", 0, 100_000_000, 300_000, step=10_000)
 
+    # ── Content & Media ───────────────────────────────────────────────────────
     st.markdown('<div class="section-header">🎬 Content & Media</div>', unsafe_allow_html=True)
-    movie_count           = st.number_input("Trailers / Movies",           0, 50,   1)
-    screenshot_count      = st.number_input("Screenshots",                 0, 100, 10)
-    dlc_count             = st.number_input("DLC Count",                   0, 200,  0)
-    package_count         = st.number_input("Packages",                    1, 200,  1)
-    demo_count            = st.number_input("Demo Count",                  0, 20,   0)
-    achievement_count     = st.number_input("Achievements",                0, 5000, 0)
-    highlighted_achiev    = st.number_input("Highlighted Achievements",    0, 50,   0)
+    movie_count        = st.number_input("Trailers / Movies",        0, 50,   1)
+    screenshot_count   = st.number_input("Screenshots",              0, 100, 10)
+    dlc_count          = st.number_input("DLC Count",                0, 200,  0)
+    package_count      = st.number_input("Packages",                 1, 200,  1)
+    demo_count         = st.number_input("Demo Count",               0, 20,   0)
+    achievement_count  = st.number_input("Achievements",             0, 5000, 0)
+    highlighted_achiev = st.number_input("Highlighted Achievements", 0, 50,   0)
 
+    # ── Developer / Publisher ─────────────────────────────────────────────────
     st.markdown('<div class="section-header">👥 Developer / Publisher</div>', unsafe_allow_html=True)
     developer_count = st.number_input("Developers", 1, 50, 1)
     publisher_count = st.number_input("Publishers",  1, 50, 1)
 
+    # ── Platforms ─────────────────────────────────────────────────────────────
     st.markdown('<div class="section-header">🖥️ Platforms</div>', unsafe_allow_html=True)
     col_a, col_b, col_c = st.columns(3)
     with col_a: plat_win   = st.checkbox("Windows", value=True)
@@ -229,6 +238,7 @@ with st.sidebar:
     with col_c: plat_mac   = st.checkbox("Mac")
     ctrl_support = st.checkbox("Controller Support")
 
+    # ── Categories ────────────────────────────────────────────────────────────
     st.markdown('<div class="section-header">🏷️ Categories</div>', unsafe_allow_html=True)
     col3, col4 = st.columns(2)
     with col3:
@@ -240,6 +250,7 @@ with st.sidebar:
         cat_iap = st.checkbox("In-App Purchase")
         cat_vr  = st.checkbox("VR Support")
 
+    # ── Genres ────────────────────────────────────────────────────────────────
     st.markdown('<div class="section-header">🎲 Genres</div>', unsafe_allow_html=True)
     col1, col2 = st.columns(2)
     with col1:
@@ -257,55 +268,6 @@ with st.sidebar:
         g_racing      = st.checkbox("Racing")
         g_mmo_genre   = st.checkbox("Massively Multiplayer")
 
-    st.markdown('<div class="section-header">💻 PC Requirements</div>', unsafe_allow_html=True)
-    pc_min_reqs_text = (
-        st.text_area("PC Minimum Requirements Text",
-                     placeholder='e.g. "RAM: 8 GB  Processor: 2.4 GHz"',
-                     height=68, disabled=not is_pkl)
-        if is_pkl else ""
-    )
-    pc_has_rec = st.checkbox("Has Recommended PC Specs?", disabled=not is_pkl) if is_pkl else False
-    pc_rec_reqs_text = (
-        st.text_area("PC Recommended Requirements Text",
-                     placeholder='e.g. "RAM: 16 GB  Processor: 3.6 GHz"', height=68)
-        if (is_pkl and pc_has_rec) else ""
-    )
-
-    st.markdown('<div class="section-header">🍎 Mac Requirements</div>', unsafe_allow_html=True)
-    mac_has_min = st.checkbox("Has Mac Min Specs?", disabled=not is_pkl) if is_pkl else False
-    mac_min_reqs_text = (
-        st.text_area("Mac Minimum Requirements Text",
-                     placeholder='e.g. "RAM: 4 GB"', height=68)
-        if (is_pkl and mac_has_min) else ""
-    )
-
-    st.markdown('<div class="section-header">🌐 Support / Identity</div>', unsafe_allow_html=True)
-    has_legal_notice  = st.checkbox("Has Legal Notice",      disabled=not is_pkl) if is_pkl else False
-    has_website       = st.checkbox("Has Developer Website", disabled=not is_pkl) if is_pkl else False
-    has_support_email = st.checkbox("Has Support Email",     disabled=not is_pkl) if is_pkl else False
-    has_support_url   = st.checkbox("Has Support URL",       disabled=not is_pkl) if is_pkl else False
-    lang_english      = st.checkbox("Supports English", value=True, disabled=not is_pkl) if is_pkl else True
-
-    st.markdown('<div class="section-header">📝 Description (NLP)</div>', unsafe_allow_html=True)
-    about_text = (
-        st.text_area("About / Description Text",
-                     placeholder="Paste the game's About or Detailed Description here...",
-                     height=130)
-        if is_pkl else ""
-    )
-    if not is_pkl:
-        st.caption("Not used by Scratch model.")
-
-    st.markdown('<div class="section-header">💬 Reviews (NLP)</div>', unsafe_allow_html=True)
-    reviews_text = (
-        st.text_area("User Reviews Text",
-                     placeholder="Paste a sample of user reviews here...",
-                     height=100)
-        if is_pkl else ""
-    )
-    if not is_pkl:
-        st.caption("Not used by Scratch model.")
-
     st.markdown("---")
     predict_btn = st.button("🔮  RUN PREDICTION")
 
@@ -315,7 +277,6 @@ st.markdown("## 🎮 Steam Game Recommendation Predictor")
 st.markdown("Predict how many Steam recommendations a game will receive based on all its features.")
 st.markdown("---")
 
-# Load model metadata for the stats row
 with st.spinner("Loading model…"):
     if model_name == "Linear Regression (Scratch)":
         scratch_model, scratch_scaler, scratch_feature_cols, rmse, r2, n_samples = train_scratch_model()
@@ -340,9 +301,9 @@ st.markdown("<br>", unsafe_allow_html=True)
 if predict_btn:
 
     if model_name == "Linear Regression (Scratch)":
-        # Scratch path: 40 raw features + StandardScaler (no preprocess.py needed)
+        # 40 raw features + StandardScaler (no preprocess.py needed)
         input_vector = [
-            required_age, demo_count, developer_count, dlc_count, 0,
+            required_age, demo_count, developer_count, dlc_count, metacritic,
             movie_count, package_count, publisher_count, screenshot_count,
             steam_spy_owners, steam_spy_players,
             achievement_count, highlighted_achiev,
@@ -369,60 +330,54 @@ if predict_btn:
         )
 
     else:
-        # ── PKL path: delegate entirely to predict.py ─────────────────────────
+        # PKL path: all 51 features passed to predict.py → preprocess.build_inference_row()
         inputs = {
-            # pricing
-            "price_initial":        price_initial,
-            "price_final":          price_final,
-            # popularity
-            "steam_spy_owners":     steam_spy_owners,
-            "steam_spy_owners_var": steam_spy_owners_var,
-            "steam_spy_players":    steam_spy_players,
-            "steam_spy_players_var":steam_spy_players_var,
-            # content
-            "movie_count":          movie_count,
-            "screenshot_count":     screenshot_count,
-            "dlc_count":            dlc_count,
-            "package_count":        package_count,
-            "achievement_count":    achievement_count,
-            "highlighted_achiev":   highlighted_achiev,
+            # core numeric
+            "required_age":        required_age,
+            "demo_count":          demo_count,
+            "developer_count":     developer_count,
+            "dlc_count":           dlc_count,
+            "metacritic":          metacritic,
+            "movie_count":         movie_count,
+            "package_count":       package_count,
+            "publisher_count":     publisher_count,
+            "screenshot_count":    screenshot_count,
+            "steam_spy_owners":    steam_spy_owners,
+            "steam_spy_players":   steam_spy_players,
+            "achievement_count":   achievement_count,
+            "highlighted_achiev":  highlighted_achiev,
+            "price_initial":       price_initial,
+            "price_final":         price_final,
             # binary flags
-            "is_free":              int(is_free),
-            "purchase_avail":       int(purchase_avail),
-            "free_ver_avail":       int(free_ver_avail),
-            "ctrl_support":         int(ctrl_support),
-            "plat_win":             int(plat_win),
-            "plat_linux":           int(plat_linux),
-            "plat_mac":             int(plat_mac),
-            "cat_single":           int(cat_single),
-            "cat_multi":            int(cat_multi),
-            "cat_coop":             int(cat_coop),
-            "cat_mmo":              int(cat_mmo),
-            "cat_iap":              int(cat_iap),
-            "cat_vr":               int(cat_vr),
-            "g_indie":              int(g_indie),
-            "g_action":             int(g_action),
-            "g_adventure":          int(g_adventure),
-            "g_casual":             int(g_casual),
-            "g_strategy":           int(g_strategy),
-            "g_rpg":                int(g_rpg),
-            "pc_has_rec":           int(pc_has_rec),
-            "mac_has_min":          int(mac_has_min),
-            "has_legal_notice":     int(has_legal_notice),
-            "has_website":          int(has_website),
-            "has_support_email":    int(has_support_email),
-            "has_support_url":      int(has_support_url),
-            "lang_english":         int(lang_english),
-            # text
-            "about_text":           about_text,
-            "reviews_text":         reviews_text,
-            "pc_min_reqs_text":     pc_min_reqs_text,
-            "pc_rec_reqs_text":     pc_rec_reqs_text,
-            "mac_min_reqs_text":    mac_min_reqs_text,
+            "ctrl_support":        int(ctrl_support),
+            "is_free":             int(is_free),
+            "free_ver_avail":      int(free_ver_avail),
+            "purchase_avail":      int(purchase_avail),
+            "plat_win":            int(plat_win),
+            "plat_linux":          int(plat_linux),
+            "plat_mac":            int(plat_mac),
+            "cat_single":          int(cat_single),
+            "cat_multi":           int(cat_multi),
+            "cat_coop":            int(cat_coop),
+            "cat_mmo":             int(cat_mmo),
+            "cat_iap":             int(cat_iap),
+            "cat_vr":              int(cat_vr),
+            "g_indie":             int(g_indie),
+            "g_action":            int(g_action),
+            "g_adventure":         int(g_adventure),
+            "g_casual":            int(g_casual),
+            "g_strategy":          int(g_strategy),
+            "g_rpg":               int(g_rpg),
+            "g_simulation":        int(g_simulation),
+            "g_earlyaccess":       int(g_earlyaccess),
+            "g_f2p":               int(g_f2p),
+            "g_sports":            int(g_sports),
+            "g_racing":            int(g_racing),
+            "g_mmo_genre":         int(g_mmo_genre),
         }
 
-        result      = run_predict(model_name, inputs)
-        prediction  = result["prediction"]
+        result       = run_predict(model_name, inputs)
+        prediction   = result["prediction"]
         rating_label = result["rating"]
         rating_color = result["color"]
 
@@ -464,29 +419,47 @@ if predict_btn:
         </div>""", unsafe_allow_html=True)
 
     with col_detail:
-        from preprocess import extract_ram, extract_proc
         st.markdown("#### 📋 Input Summary")
         summary_data = {
             "Feature": [
-                "Price", "Owners Est.", "Players Est.", "Achievements",
-                "Content Volume", "Platforms", "About Sentiment",
-                "Review Word Count", "PC Min RAM", "PC Min CPU",
+                "Price", "Owners Est.", "Players Est.", "Metacritic",
+                "Achievements", "Content Volume", "Platforms",
+                "Genres", "Categories",
             ],
             "Value": [
-                f"${price_final:.2f}",
+                f"${price_final:.2f} (was ${price_initial:.2f})",
                 f"{steam_spy_owners:,}",
                 f"{steam_spy_players:,}",
+                str(metacritic) if metacritic > 0 else "N/A",
                 str(achievement_count),
-                str(screenshot_count + movie_count + dlc_count + package_count),
+                str(int(screenshot_count + movie_count + dlc_count + package_count)),
                 ", ".join(filter(None, [
-                    "Windows" if plat_win  else "",
+                    "Windows" if plat_win   else "",
                     "Linux"   if plat_linux else "",
                     "Mac"     if plat_mac   else "",
                 ])) or "None",
-                f"{__import__('preprocess').build_inference_row.__module__ and __import__('nltk').sentiment.SentimentIntensityAnalyzer().polarity_scores(about_text)['compound']:.3f}" if is_pkl else "N/A",
-                str(len(reviews_text.split())) if (is_pkl and reviews_text.strip()) else ("0" if is_pkl else "N/A"),
-                f"{extract_ram(pc_min_reqs_text):.1f} GB" if is_pkl else "N/A",
-                f"{extract_proc(pc_min_reqs_text):.2f} GHz" if is_pkl else "N/A",
+                ", ".join(filter(None, [
+                    "Indie"    if g_indie       else "",
+                    "Action"   if g_action      else "",
+                    "Adventure"if g_adventure   else "",
+                    "Casual"   if g_casual      else "",
+                    "Strategy" if g_strategy    else "",
+                    "RPG"      if g_rpg         else "",
+                    "Sim"      if g_simulation  else "",
+                    "EA"       if g_earlyaccess else "",
+                    "F2P"      if g_f2p         else "",
+                    "Sports"   if g_sports      else "",
+                    "Racing"   if g_racing      else "",
+                    "MMO"      if g_mmo_genre   else "",
+                ])) or "None",
+                ", ".join(filter(None, [
+                    "Single"  if cat_single else "",
+                    "Multi"   if cat_multi  else "",
+                    "Co-op"   if cat_coop   else "",
+                    "MMO"     if cat_mmo    else "",
+                    "IAP"     if cat_iap    else "",
+                    "VR"      if cat_vr     else "",
+                ])) or "None",
             ],
         }
         st.dataframe(pd.DataFrame(summary_data), hide_index=True, use_container_width=True)
@@ -500,7 +473,7 @@ else:
             Fill in the sidebar inputs
         </div>
         <div style="font-size:0.8rem;margin-top:0.5rem;color:#2a2a5a">
-            PKL models: paste game description + reviews for best NLP accuracy
+            Configure all game features in the sidebar, then click RUN PREDICTION
         </div>
     </div>
     """, unsafe_allow_html=True)
@@ -551,7 +524,7 @@ with st.expander("🗂️ Training Data Explorer", expanded=False):
         st.dataframe(df_preview.head(50), use_container_width=True, height=300)
     else:
         feat_cols_pkl, _, _ = load_pkl_metadata()
-        st.markdown(f"**51 feature columns** used by PKL models:")
+        st.markdown(f"**{len(feat_cols_pkl)} feature columns** used by PKL models:")
         st.write(feat_cols_pkl)
         st.markdown(f"**{len(df_preview):,} rows** of raw training data:")
         st.dataframe(df_preview.head(50), use_container_width=True, height=300)

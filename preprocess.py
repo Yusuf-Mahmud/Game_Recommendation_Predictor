@@ -2,8 +2,7 @@
 preprocess.py
 ─────────────
 Single source of truth for all feature engineering.
-Imported by both the training notebook (Project.py / Notebook) and the
-inference layer (predict.py → App.py).
+Imported by both Project.py (training) and predict.py → App.py (inference).
 
 Training call:
     from preprocess import build_training_df, INFERRABLE_FEATURES
@@ -57,49 +56,116 @@ CUSTOM_STOPWORDS = {
     "based", "new", "use", "way", "different",
 }
 
-# Columns that receive log1p during training (must match exactly)
-LOG_TRANSFORM_COLS = [
-    "MovieCount", "ScreenshotCount",
-    "SteamSpyOwners", "SteamSpyOwnersVariance",
-    "SteamSpyPlayersEstimate", "SteamSpyPlayersVariance",
-    "AchievementCount", "AchievementHighlightedCount",
-    "PriceInitial", "PriceFinal",
-    "PC_MinRam", "PC_RecRam", "Mac_MinRam", "PC_MinCPU",
-    "owners_players", "price_owners", "price_players",
-    "content_volume", "content_owners", "content_players",
-    "achievement_owners", "achievement_players",
-    "platform_count", "platform_owners", "platform_players",
-    "indie_price", "category_count", "category_owners", "category_players",
-    "reviews_owners", "reviews_players",
+# ── The 51 features the models are trained on (must match Project.py exactly)
+INFERRABLE_FEATURES = [
+    # core numeric
+    "RequiredAge",
+    "DemoCount",
+    "DeveloperCount",
+    "DLCCount",
+    "Metacritic",
+    "MovieCount",
+    "PackageCount",
+    "PublisherCount",
+    "ScreenshotCount",
+    "SteamSpyOwners",
+    "SteamSpyPlayersEstimate",
+    "AchievementCount",
+    "AchievementHighlightedCount",
+    # binary flags
+    "ControllerSupport",
+    "IsFree",
+    "FreeVerAvail",
+    "PurchaseAvail",
+    "PlatformWindows",
+    "PlatformLinux",
+    "PlatformMac",
+    "CategorySinglePlayer",
+    "CategoryMultiplayer",
+    "CategoryCoop",
+    "CategoryMMO",
+    "CategoryInAppPurchase",
+    "CategoryVRSupport",
+    "GenreIsIndie",
+    "GenreIsAction",
+    "GenreIsAdventure",
+    "GenreIsCasual",
+    "GenreIsStrategy",
+    "GenreIsRPG",
+    "GenreIsSimulation",
+    "GenreIsEarlyAccess",
+    "GenreIsFreeToPlay",
+    "GenreIsSports",
+    "GenreIsRacing",
+    "GenreIsMassivelyMultiplayer",
+    # price
+    "PriceInitial",
+    "PriceFinal",
+    # engineered interactions
+    "price_discount",
+    "platform_count",
+    "category_count",
+    "content_volume",
+    "highlighted_achievements_ratio",
+    "action_multiplayer",
+    "rpg_achievement",
+    "strategy_complexity",
+    "indie_price",
+    "owners_players",
+    "price_owners",
+    "price_players",
+    "free_x_owners",
+    "free_x_players",
+    "content_owners",
+    "content_players",
+    "achievement_owners",
+    "achievement_players",
+    "platform_owners",
+    "platform_players",
+    "category_owners",
+    "category_players",
 ]
 
-# Final ordered feature list saved to feature_columns.pkl
-INFERRABLE_FEATURES = [
-    "MovieCount", "ScreenshotCount",
-    "SteamSpyOwners", "SteamSpyOwnersVariance",
-    "SteamSpyPlayersEstimate", "SteamSpyPlayersVariance",
-    "AchievementCount", "AchievementHighlightedCount",
-    "PriceInitial", "PriceFinal",
-    "PC_MinRam", "PC_RecRam", "Mac_MinRam", "PC_MinCPU",
-    "owners_players", "price_owners", "price_players",
-    "content_volume", "content_owners", "content_players",
-    "achievement_owners", "achievement_players",
-    "platform_count", "platform_owners", "platform_players",
-    "indie_price", "category_count", "category_owners", "category_players",
-    "reviews_owners", "reviews_players",
-    # binary – no log1p
-    "ControllerSupport", "PlatformMac", "PCReqsHaveRec", "MacReqsHaveMin",
-    "CategoryMultiplayer", "GenreIsIndie", "GenreIsAction", "GenreIsAdventure",
-    "GenreIsCasual", "LegalNotice", "Lang_english",
-    # keyword flags – no log1p
-    "has_war", "has_action", "has_team",
-    # frequency-encoded – no log1p
-    "SupportEmail", "SupportURL", "Website",
-    # NLP continuous – no log1p
-    "AllText_len", "AboutSentiment",
-    # ratio – no log1p
-    "highlighted_achievements_ratio",
-]
+# Columns that receive log1p during training.
+# Binary cols (nunique <= 2), ratio cols, and freq-encoded cols are excluded.
+LOG_TRANSFORM_COLS = {
+    "RequiredAge",
+    "DemoCount",
+    "DeveloperCount",
+    "DLCCount",
+    "Metacritic",
+    "MovieCount",
+    "PackageCount",
+    "PublisherCount",
+    "ScreenshotCount",
+    "SteamSpyOwners",
+    "SteamSpyPlayersEstimate",
+    "AchievementCount",
+    "AchievementHighlightedCount",
+    "PriceInitial",
+    "PriceFinal",
+    "price_discount",
+    "platform_count",
+    "category_count",
+    "content_volume",
+    "indie_price",
+    "owners_players",
+    "price_owners",
+    "price_players",
+    "free_x_owners",
+    "free_x_players",
+    "content_owners",
+    "content_players",
+    "action_multiplayer",
+    "rpg_achievement",
+    "strategy_complexity",
+    "achievement_owners",
+    "achievement_players",
+    "platform_owners",
+    "platform_players",
+    "category_owners",
+    "category_players",
+}
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
@@ -156,10 +222,10 @@ def _sentiment(text: str) -> float:
 
 def build_training_df(df_raw: pd.DataFrame):
     """
-    Apply every preprocessing step from the notebook to a raw training
-    DataFrame.  Returns (df_features, y_log1p).
+    Apply every preprocessing step to a raw training DataFrame.
+    Returns (df_features, y_log1p).
 
-    Usage (replaces the long preprocessing block in Project.py / Notebook):
+    Usage (in Project.py):
         from preprocess import build_training_df, INFERRABLE_FEATURES
         df_features, y = build_training_df(df_raw)
         X = df_features[INFERRABLE_FEATURES]
@@ -170,7 +236,6 @@ def build_training_df(df_raw: pd.DataFrame):
     df = df.drop_duplicates()
     df = df.replace(r"^\s*$", np.nan, regex=True)
 
-    # fill text nulls
     df["QueryName"] = df["QueryName"].fillna(df["ResponseName"])
     df["PriceCurrency"] = df["PriceCurrency"].fillna("USD")
     df["SupportURL"] = df["SupportURL"].fillna("")
@@ -247,62 +312,57 @@ def build_training_df(df_raw: pd.DataFrame):
     df["AboutSentiment"] = df["AboutText"].fillna("").apply(
         lambda x: sia.polarity_scores(str(x))["compound"]
     )
-
-    # review word count (used in interaction features below)
     df["review_words"] = df["Reviews"].fillna("").str.split().str.len()
 
     # ── feature interactions ──────────────────────────────────────────────────
     metacritic = df["Metacritic"].fillna(df["Metacritic"].median())
 
-    df["owners_metacritic"] = df["SteamSpyOwners"] * metacritic
-    df["players_metacritic"] = df["SteamSpyPlayersEstimate"] * metacritic
-    df["owners_players"] = df["SteamSpyOwners"] * df["SteamSpyPlayersEstimate"]
+    df["owners_players"]   = df["SteamSpyOwners"] * df["SteamSpyPlayersEstimate"]
+    df["price_discount"]   = (df["PriceInitial"] - df["PriceFinal"]).clip(lower=0)
+    df["price_owners"]     = df["PriceFinal"] * df["SteamSpyOwners"]
+    df["price_players"]    = df["PriceFinal"] * df["SteamSpyPlayersEstimate"]
+    df["free_x_owners"]    = df["IsFree"] * df["SteamSpyOwners"]
+    df["free_x_players"]   = df["IsFree"] * df["SteamSpyPlayersEstimate"]
 
-    df["price_discount"] = df["PriceInitial"] - df["PriceFinal"]
-    df["price_owners"] = df["PriceFinal"] * df["SteamSpyOwners"]
-    df["price_players"] = df["PriceFinal"] * df["SteamSpyPlayersEstimate"]
-    df["free_x_owners"] = df["IsFree"] * df["SteamSpyOwners"]
-    df["free_x_players"] = df["IsFree"] * df["SteamSpyPlayersEstimate"]
-
-    df["content_volume"] = (
+    df["content_volume"]   = (
         df["ScreenshotCount"] + df["MovieCount"] + df["DLCCount"] + df["PackageCount"]
     )
-    df["content_owners"] = df["content_volume"] * df["SteamSpyOwners"]
-    df["content_players"] = df["content_volume"] * df["SteamSpyPlayersEstimate"]
-    df["content_metacritic"] = df["content_volume"] * metacritic
+    df["content_owners"]   = df["content_volume"] * df["SteamSpyOwners"]
+    df["content_players"]  = df["content_volume"] * df["SteamSpyPlayersEstimate"]
 
-    df["achievement_owners"] = df["AchievementCount"] * df["SteamSpyOwners"]
+    df["achievement_owners"]  = df["AchievementCount"] * df["SteamSpyOwners"]
     df["achievement_players"] = df["AchievementCount"] * df["SteamSpyPlayersEstimate"]
     df["highlighted_achievements_ratio"] = (
         df["AchievementHighlightedCount"] / (df["AchievementCount"] + 1)
     )
 
-    df["platform_count"] = (
+    df["platform_count"]   = (
         df["PlatformWindows"].astype(int)
         + df["PlatformLinux"].astype(int)
         + df["PlatformMac"].astype(int)
     )
-    df["platform_owners"] = df["platform_count"] * df["SteamSpyOwners"]
+    df["platform_owners"]  = df["platform_count"] * df["SteamSpyOwners"]
     df["platform_players"] = df["platform_count"] * df["SteamSpyPlayersEstimate"]
 
-    df["action_multiplayer"] = df["GenreIsAction"] * df["CategoryMultiplayer"]
-    df["rpg_achievement"] = df["GenreIsRPG"] * df["AchievementCount"]
-    df["strategy_complexity"] = df["GenreIsStrategy"] * df["AchievementCount"]
-    df["indie_price"] = df["GenreIsIndie"] * df["PriceFinal"]
+    df["action_multiplayer"]   = df["GenreIsAction"] * df["CategoryMultiplayer"]
+    df["rpg_achievement"]      = df["GenreIsRPG"] * df["AchievementCount"]
+    df["strategy_complexity"]  = df["GenreIsStrategy"] * df["AchievementCount"]
+    df["indie_price"]          = df["GenreIsIndie"] * df["PriceFinal"]
 
-    df["category_count"] = (
+    df["category_count"]   = (
         df["CategorySinglePlayer"] + df["CategoryMultiplayer"] + df["CategoryCoop"]
         + df["CategoryMMO"] + df["CategoryVRSupport"]
     )
-    df["category_owners"] = df["category_count"] * df["SteamSpyOwners"]
+    df["category_owners"]  = df["category_count"] * df["SteamSpyOwners"]
     df["category_players"] = df["category_count"] * df["SteamSpyPlayersEstimate"]
 
-    df["reviews_owners"] = df["review_words"] * df["SteamSpyOwners"]
-    df["reviews_players"] = df["review_words"] * df["SteamSpyPlayersEstimate"]
-    df["reviews_metacritic"] = df["review_words"] * metacritic
+    # ── fill nulls on numeric cols (Metacritic, RequiredAge, DemoCount, etc.) ─
+    num_cols = df.select_dtypes(include=["number"]).columns
+    for col in num_cols:
+        if df[col].isna().any():
+            df[col] = df[col].fillna(df[col].median())
 
     # ── outlier clipping ──────────────────────────────────────────────────────
-    num_cols = df.select_dtypes(include=["number"]).columns
     for col in num_cols:
         q1, q3 = df[col].quantile(0.25), df[col].quantile(0.75)
         iqr = q3 - q1
@@ -326,231 +386,189 @@ def build_inference_row(inputs: dict, feat_cols: list, feat_medians: dict) -> np
     Convert a flat dict of raw UI inputs into a 1-row numpy array ready for
     model.predict().
 
+    The output feature vector exactly matches the columns stored in
+    feature_columns.pkl (in log1p space, same as training).
+
     Parameters
     ----------
     inputs : dict
-        Keys match the raw field names collected by the GUI (see FIELD GUIDE
-        below).  Missing optional keys fall back to 0 or the training median.
+        Raw GUI values. All keys below are accepted.
     feat_cols : list
         Ordered list loaded from Models/feature_columns.pkl.
     feat_medians : dict
-        Per-column medians loaded from Models/feature_medians.pkl.
+        Per-column medians (already log1p-scaled) from Models/feature_medians.pkl.
 
     Returns
     -------
     np.ndarray, shape (1, len(feat_cols))
 
-    FIELD GUIDE (all keys, types, defaults)
-    ────────────────────────────────────────
-    Numeric
+    FIELD GUIDE
+    ───────────
+    Numeric (raw – log1p applied internally where appropriate)
         required_age         int     0
-        price_initial        float   9.99
-        price_final          float   9.99
-        steam_spy_owners     int     500_000
-        steam_spy_owners_var int     200_000
-        steam_spy_players    int     300_000
-        steam_spy_players_var int    150_000
-        movie_count          int     1
-        screenshot_count     int     10
-        dlc_count            int     0
-        package_count        int     1
         demo_count           int     0
+        developer_count      int     1
+        dlc_count            int     0
+        metacritic           float   0       (0 = no score)
+        movie_count          int     1
+        package_count        int     1
+        publisher_count      int     1
+        screenshot_count     int     10
+        steam_spy_owners     int     500_000
+        steam_spy_players    int     300_000
         achievement_count    int     0
         highlighted_achiev   int     0
-        developer_count      int     1
-        publisher_count      int     1
+        price_initial        float   9.99
+        price_final          float   9.99
+
     Boolean (int 0/1)
-        is_free              int     0
-        purchase_avail       int     1
-        free_ver_avail       int     0
-        ctrl_support         int     0
-        plat_win             int     1
-        plat_linux           int     0
-        plat_mac             int     0
-        cat_single           int     1
-        cat_multi            int     0
-        cat_coop             int     0
-        cat_mmo              int     0
-        cat_iap              int     0
-        cat_vr               int     0
-        g_indie              int     0
-        g_action             int     0
-        g_adventure          int     0
-        g_casual             int     0
-        g_strategy           int     0
-        g_rpg                int     0
-        g_simulation         int     0
-        g_earlyaccess        int     0
-        g_f2p                int     0
-        g_sports             int     0
-        g_racing             int     0
-        g_mmo_genre          int     0
-        pc_has_rec           int     0
-        mac_has_min          int     0
-        has_legal_notice     int     0
-        has_website          int     0
-        has_support_email    int     0
-        has_support_url      int     0
-        lang_english         int     1
-    Text (raw strings – NLP applied internally)
-        about_text           str     ""
-        reviews_text         str     ""
-        pc_min_reqs_text     str     ""
-        pc_rec_reqs_text     str     ""
-        mac_min_reqs_text    str     ""
-    Frequency-encoding context (pass training freq dicts when available)
-        _freq_support_email  dict    {}   (value_counts from training)
-        _freq_support_url    dict    {}
-        _freq_website        dict    {}
+        ctrl_support, is_free, free_ver_avail, purchase_avail
+        plat_win, plat_linux, plat_mac
+        cat_single, cat_multi, cat_coop, cat_mmo, cat_iap, cat_vr
+        g_indie, g_action, g_adventure, g_casual
+        g_strategy, g_rpg, g_simulation, g_earlyaccess
+        g_f2p, g_sports, g_racing, g_mmo_genre
     """
 
     g = inputs  # shorthand
 
     # ── raw scalars ───────────────────────────────────────────────────────────
-    price_initial      = float(g.get("price_initial", 9.99))
-    price_final        = float(g.get("price_final", 9.99))
-    owners             = float(g.get("steam_spy_owners", 500_000))
-    owners_var         = float(g.get("steam_spy_owners_var", 200_000))
-    players            = float(g.get("steam_spy_players", 300_000))
-    players_var        = float(g.get("steam_spy_players_var", 150_000))
-    movie_count        = float(g.get("movie_count", 1))
-    screenshot_count   = float(g.get("screenshot_count", 10))
+    required_age       = float(g.get("required_age", 0))
+    demo_count         = float(g.get("demo_count", 0))
+    developer_count    = float(g.get("developer_count", 1))
     dlc_count          = float(g.get("dlc_count", 0))
+    metacritic         = float(g.get("metacritic", 0))
+    movie_count        = float(g.get("movie_count", 1))
     package_count      = float(g.get("package_count", 1))
+    publisher_count    = float(g.get("publisher_count", 1))
+    screenshot_count   = float(g.get("screenshot_count", 10))
+    owners             = float(g.get("steam_spy_owners", 500_000))
+    players            = float(g.get("steam_spy_players", 300_000))
     achievement_count  = float(g.get("achievement_count", 0))
     highlighted_achiev = float(g.get("highlighted_achiev", 0))
+    price_initial      = float(g.get("price_initial", 9.99))
+    price_final        = float(g.get("price_final", 9.99))
 
-    # binary
-    plat_win    = int(g.get("plat_win", 1))
-    plat_linux  = int(g.get("plat_linux", 0))
-    plat_mac    = int(g.get("plat_mac", 0))
-    cat_single  = int(g.get("cat_single", 1))
-    cat_multi   = int(g.get("cat_multi", 0))
-    cat_coop    = int(g.get("cat_coop", 0))
-    cat_mmo     = int(g.get("cat_mmo", 0))
-    cat_vr      = int(g.get("cat_vr", 0))
-    g_indie     = int(g.get("g_indie", 0))
-    g_action    = int(g.get("g_action", 0))
-    g_adventure = int(g.get("g_adventure", 0))
-    g_casual    = int(g.get("g_casual", 0))
-    g_strategy  = int(g.get("g_strategy", 0))
-    g_rpg       = int(g.get("g_rpg", 0))
-    pc_has_rec  = int(g.get("pc_has_rec", 0))
-    mac_has_min = int(g.get("mac_has_min", 0))
+    # ── binary ────────────────────────────────────────────────────────────────
+    ctrl_support  = int(g.get("ctrl_support", 0))
+    is_free       = int(g.get("is_free", 0))
+    free_ver_avail= int(g.get("free_ver_avail", 0))
+    purchase_avail= int(g.get("purchase_avail", 1))
+    plat_win      = int(g.get("plat_win", 1))
+    plat_linux    = int(g.get("plat_linux", 0))
+    plat_mac      = int(g.get("plat_mac", 0))
+    cat_single    = int(g.get("cat_single", 1))
+    cat_multi     = int(g.get("cat_multi", 0))
+    cat_coop      = int(g.get("cat_coop", 0))
+    cat_mmo       = int(g.get("cat_mmo", 0))
+    cat_iap       = int(g.get("cat_iap", 0))
+    cat_vr        = int(g.get("cat_vr", 0))
+    g_indie       = int(g.get("g_indie", 0))
+    g_action      = int(g.get("g_action", 0))
+    g_adventure   = int(g.get("g_adventure", 0))
+    g_casual      = int(g.get("g_casual", 0))
+    g_strategy    = int(g.get("g_strategy", 0))
+    g_rpg         = int(g.get("g_rpg", 0))
+    g_simulation  = int(g.get("g_simulation", 0))
+    g_earlyaccess = int(g.get("g_earlyaccess", 0))
+    g_f2p         = int(g.get("g_f2p", 0))
+    g_sports      = int(g.get("g_sports", 0))
+    g_racing      = int(g.get("g_racing", 0))
+    g_mmo_genre   = int(g.get("g_mmo_genre", 0))
 
-    # ── NLP ───────────────────────────────────────────────────────────────────
-    about_text   = str(g.get("about_text", ""))
-    reviews_text = str(g.get("reviews_text", ""))
-    cleaned_about = clean_text(about_text)
-    all_text_len  = len(cleaned_about.split()) if cleaned_about.strip() else 0
-    about_sent    = _sentiment(about_text)
-    review_words  = len(reviews_text.split()) if reviews_text.strip() else 0
-
-    kw_war    = int("war"    in cleaned_about)
-    kw_action = int("action" in cleaned_about)
-    kw_team   = int("team"   in cleaned_about)
-
-    # ── requirements ─────────────────────────────────────────────────────────
-    pc_min_ram  = extract_ram(g.get("pc_min_reqs_text", ""))
-    pc_rec_ram  = extract_ram(g.get("pc_rec_reqs_text", "")) if pc_has_rec else 0.0
-    mac_min_ram = extract_ram(g.get("mac_min_reqs_text", "")) if mac_has_min else 0.0
-    pc_min_cpu  = extract_proc(g.get("pc_min_reqs_text", ""))
-
-    # ── frequency-encoded support fields ─────────────────────────────────────
-    # Use training-time freq dicts when available, else fall back to median
-    support_email_enc = (
-        g.get("_freq_support_email", {}).get(g.get("support_email_domain", ""), 0)
-        or (feat_medians.get("SupportEmail", 0.00022) if g.get("has_support_email") else 0.0)
-    )
-    support_url_enc = (
-        g.get("_freq_support_url", {}).get(g.get("support_url_domain", ""), 0)
-        or (feat_medians.get("SupportURL", 0.00342) if g.get("has_support_url") else 0.0)
-    )
-    website_enc = (
-        g.get("_freq_website", {}).get(g.get("website_domain", ""), 0)
-        or (feat_medians.get("Website", 0.00022) if g.get("has_website") else 0.0)
-    )
-
-    # ── interaction features (raw, before log1p) ──────────────────────────────
-    content_volume   = screenshot_count + movie_count + dlc_count + package_count
+    # ── engineered features (raw, before log1p) ───────────────────────────────
     platform_count   = plat_win + plat_linux + plat_mac
     category_count   = cat_single + cat_multi + cat_coop + cat_mmo + cat_vr
+    content_volume   = screenshot_count + movie_count + dlc_count + package_count
+    price_discount   = max(0.0, price_initial - price_final)
 
-    owners_players      = owners * players
-    price_owners        = price_final * owners
-    price_players       = price_final * players
-    content_owners      = content_volume * owners
-    content_players     = content_volume * players
-    achievement_owners  = achievement_count * owners
-    achievement_players = achievement_count * players
-    platform_owners     = platform_count * owners
-    platform_players    = platform_count * players
-    indie_price         = g_indie * price_final
-    category_owners     = category_count * owners
-    category_players    = category_count * players
-    reviews_owners      = review_words * owners
-    reviews_players     = review_words * players
-    highlighted_ratio   = highlighted_achiev / (achievement_count + 1)
+    highlighted_ratio    = highlighted_achiev / (achievement_count + 1)
+    indie_price          = g_indie * price_final
+    action_multiplayer   = g_action * cat_multi
+    rpg_achievement      = g_rpg * achievement_count
+    strategy_complexity  = g_strategy * achievement_count
+    owners_players       = owners * players
+    price_owners         = price_final * owners
+    price_players        = price_final * players
+    free_x_owners        = is_free * owners
+    free_x_players       = is_free * players
+    content_owners       = content_volume * owners
+    content_players      = content_volume * players
+    achievement_owners   = achievement_count * owners
+    achievement_players  = achievement_count * players
+    platform_owners      = platform_count * owners
+    platform_players     = platform_count * players
+    category_owners      = category_count * owners
+    category_players     = category_count * players
 
-    # ── assemble raw dict ─────────────────────────────────────────────────────
+    # ── assemble raw dict (mirrors INFERRABLE_FEATURES order) ─────────────────
     raw = {
-        # numeric – will be log1p'd
-        "MovieCount":                  movie_count,
-        "ScreenshotCount":             screenshot_count,
-        "SteamSpyOwners":              owners,
-        "SteamSpyOwnersVariance":      owners_var,
-        "SteamSpyPlayersEstimate":     players,
-        "SteamSpyPlayersVariance":     players_var,
-        "AchievementCount":            achievement_count,
-        "AchievementHighlightedCount": highlighted_achiev,
-        "PriceInitial":                price_initial,
-        "PriceFinal":                  price_final,
-        "PC_MinRam":                   pc_min_ram,
-        "PC_RecRam":                   pc_rec_ram,
-        "Mac_MinRam":                  mac_min_ram,
-        "PC_MinCPU":                   pc_min_cpu,
-        "owners_players":              owners_players,
-        "price_owners":                price_owners,
-        "price_players":               price_players,
-        "content_volume":              content_volume,
-        "content_owners":              content_owners,
-        "content_players":             content_players,
-        "achievement_owners":          achievement_owners,
-        "achievement_players":         achievement_players,
-        "platform_count":              platform_count,
-        "platform_owners":             platform_owners,
-        "platform_players":            platform_players,
-        "indie_price":                 indie_price,
-        "category_count":              category_count,
-        "category_owners":             category_owners,
-        "category_players":            category_players,
-        "reviews_owners":              reviews_owners,
-        "reviews_players":             reviews_players,
-        # binary – no log1p
-        "ControllerSupport":           int(g.get("ctrl_support", 0)),
-        "PlatformMac":                 plat_mac,
-        "PCReqsHaveRec":               pc_has_rec,
-        "MacReqsHaveMin":              mac_has_min,
-        "CategoryMultiplayer":         cat_multi,
-        "GenreIsIndie":                g_indie,
-        "GenreIsAction":               g_action,
-        "GenreIsAdventure":            g_adventure,
-        "GenreIsCasual":               g_casual,
-        "LegalNotice":                 int(g.get("has_legal_notice", 0)),
-        "Lang_english":                int(g.get("lang_english", 1)),
-        # keyword flags
-        "has_war":                     kw_war,
-        "has_action":                  kw_action,
-        "has_team":                    kw_team,
-        # frequency-encoded
-        "SupportEmail":                support_email_enc,
-        "SupportURL":                  support_url_enc,
-        "Website":                     website_enc,
-        # NLP continuous
-        "AllText_len":                 all_text_len,
-        "AboutSentiment":              about_sent,
-        # ratio
-        "highlighted_achievements_ratio": highlighted_ratio,
+        # core numeric
+        "RequiredAge":                    required_age,
+        "DemoCount":                      demo_count,
+        "DeveloperCount":                 developer_count,
+        "DLCCount":                       dlc_count,
+        "Metacritic":                     metacritic,
+        "MovieCount":                     movie_count,
+        "PackageCount":                   package_count,
+        "PublisherCount":                 publisher_count,
+        "ScreenshotCount":                screenshot_count,
+        "SteamSpyOwners":                 owners,
+        "SteamSpyPlayersEstimate":        players,
+        "AchievementCount":               achievement_count,
+        "AchievementHighlightedCount":    highlighted_achiev,
+        # binary — no log1p
+        "ControllerSupport":              ctrl_support,
+        "IsFree":                         is_free,
+        "FreeVerAvail":                   free_ver_avail,
+        "PurchaseAvail":                  purchase_avail,
+        "PlatformWindows":                plat_win,
+        "PlatformLinux":                  plat_linux,
+        "PlatformMac":                    plat_mac,
+        "CategorySinglePlayer":           cat_single,
+        "CategoryMultiplayer":            cat_multi,
+        "CategoryCoop":                   cat_coop,
+        "CategoryMMO":                    cat_mmo,
+        "CategoryInAppPurchase":          cat_iap,
+        "CategoryVRSupport":              cat_vr,
+        "GenreIsIndie":                   g_indie,
+        "GenreIsAction":                  g_action,
+        "GenreIsAdventure":               g_adventure,
+        "GenreIsCasual":                  g_casual,
+        "GenreIsStrategy":                g_strategy,
+        "GenreIsRPG":                     g_rpg,
+        "GenreIsSimulation":              g_simulation,
+        "GenreIsEarlyAccess":             g_earlyaccess,
+        "GenreIsFreeToPlay":              g_f2p,
+        "GenreIsSports":                  g_sports,
+        "GenreIsRacing":                  g_racing,
+        "GenreIsMassivelyMultiplayer":    g_mmo_genre,
+        # price
+        "PriceInitial":                   price_initial,
+        "PriceFinal":                     price_final,
+        # interactions
+        "price_discount":                 price_discount,
+        "platform_count":                 platform_count,
+        "category_count":                 category_count,
+        "content_volume":                 content_volume,
+        "highlighted_achievements_ratio": highlighted_ratio,  # NOT log1p'd
+        "action_multiplayer":             action_multiplayer,
+        "rpg_achievement":                rpg_achievement,
+        "strategy_complexity":            strategy_complexity,
+        "indie_price":                    indie_price,
+        "owners_players":                 owners_players,
+        "price_owners":                   price_owners,
+        "price_players":                  price_players,
+        "free_x_owners":                  free_x_owners,
+        "free_x_players":                 free_x_players,
+        "content_owners":                 content_owners,
+        "content_players":                content_players,
+        "achievement_owners":             achievement_owners,
+        "achievement_players":            achievement_players,
+        "platform_owners":                platform_owners,
+        "platform_players":               platform_players,
+        "category_owners":                category_owners,
+        "category_players":               category_players,
     }
 
     # ── apply log1p to matching keys ──────────────────────────────────────────
@@ -558,6 +576,6 @@ def build_inference_row(inputs: dict, feat_cols: list, feat_medians: dict) -> np
         if k in raw:
             raw[k] = math.log1p(max(0.0, raw[k]))
 
-    # ── build final ordered vector ────────────────────────────────────────────
+    # ── build final ordered vector aligned to feat_cols ───────────────────────
     row = [raw.get(col, feat_medians.get(col, 0.0)) for col in feat_cols]
     return np.array(row, dtype=float).reshape(1, -1)
