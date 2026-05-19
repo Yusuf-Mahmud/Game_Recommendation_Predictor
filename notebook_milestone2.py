@@ -633,7 +633,7 @@ df = df.drop(columns=cols_to_drop, errors="ignore")
 
 
 # =========================================================================
-# yousef
+# Yusuf
 
 """### Handle Skew"""
 
@@ -906,6 +906,14 @@ if mode.lower() == "c":
     # logistic regression
     def train_logistic(X_train, X_test, y_train, y_test):
         C_values = [0.01, 0.1, 1.0, 10.0]
+
+
+
+
+
+
+
+        
         results = []
 
         for c in C_values:
